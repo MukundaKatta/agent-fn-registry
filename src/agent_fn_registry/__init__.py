@@ -46,6 +46,7 @@ get out of sync.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
@@ -105,9 +106,10 @@ class Registry:
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator. Registers the decorated function as a tool.
 
-            @reg.tool(schema={...}, side_effects=["read"])
-            def search(q): ...
+        @reg.tool(schema={...}, side_effects=["read"])
+        def search(q): ...
         """
+
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             resolved = name or schema.get("name") or fn.__name__
             self.register(
@@ -174,7 +176,7 @@ class Registry:
         return self._tools[name]
 
     def get_schema(self, name: str) -> dict[str, Any]:
-        return dict(self.get(name).schema)
+        return deepcopy(self.get(name).schema)
 
     def side_effects_of(self, name: str) -> frozenset[str]:
         return self.get(name).side_effects
@@ -208,24 +210,28 @@ class Registry:
         Each entry is the schema dict itself (already shaped as
         `{name, description, input_schema}`).
         """
-        return [dict(e.schema) for e in self._tools.values()]
+        return [deepcopy(e.schema) for e in self._tools.values()]
 
     def openai_functions(self) -> list[dict[str, Any]]:
         """Return all schemas in OpenAI function-calling shape."""
         out: list[dict[str, Any]] = []
         for e in self._tools.values():
             schema = e.schema
-            out.append({
-                "type": "function",
-                "function": {
-                    "name": schema["name"],
-                    "description": schema.get("description", ""),
-                    "parameters": schema.get(
-                        "input_schema",
-                        schema.get("parameters", {}),
-                    ),
-                },
-            })
+            out.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": schema["name"],
+                        "description": schema.get("description", ""),
+                        "parameters": deepcopy(
+                            schema.get(
+                                "input_schema",
+                                schema.get("parameters", {}),
+                            )
+                        ),
+                    },
+                }
+            )
         return out
 
     # ---- filtering -------------------------------------------------

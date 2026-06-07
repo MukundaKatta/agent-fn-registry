@@ -49,6 +49,14 @@ def test_get_schema_returns_copy():
     assert reg.get_schema("s")["description"] == "Search the web."
 
 
+def test_get_schema_deep_copies_nested():
+    reg = Registry()
+    reg.register("s", lambda: None, schema=SAMPLE_SCHEMA)
+    snap = reg.get_schema("s")
+    snap["input_schema"]["properties"]["INJECTED"] = {"type": "string"}
+    assert "INJECTED" not in reg.get_schema("s")["input_schema"]["properties"]
+
+
 def test_register_rejects_non_callable():
     reg = Registry()
     with pytest.raises(TypeError):
@@ -153,11 +161,31 @@ def test_dispatch_no_args_passes_only_defaults():
 
 def test_anthropic_tools_lists_all():
     reg = Registry()
-    reg.register("a", lambda: None, schema={"name": "a", "description": "A", "input_schema": {}})
-    reg.register("b", lambda: None, schema={"name": "b", "description": "B", "input_schema": {}})
+    reg.register(
+        "a", lambda: None, schema={"name": "a", "description": "A", "input_schema": {}}
+    )
+    reg.register(
+        "b", lambda: None, schema={"name": "b", "description": "B", "input_schema": {}}
+    )
     tools = reg.anthropic_tools()
     names = sorted(t["name"] for t in tools)
     assert names == ["a", "b"]
+
+
+def test_anthropic_tools_deep_copies_nested():
+    reg = Registry()
+    reg.register("s", lambda: None, schema=SAMPLE_SCHEMA)
+    tools = reg.anthropic_tools()
+    tools[0]["input_schema"]["properties"]["INJECTED"] = {"type": "string"}
+    assert "INJECTED" not in reg.get_schema("s")["input_schema"]["properties"]
+
+
+def test_openai_functions_deep_copies_parameters():
+    reg = Registry()
+    reg.register("s", lambda: None, schema=SAMPLE_SCHEMA)
+    fns = reg.openai_functions()
+    fns[0]["function"]["parameters"]["properties"]["INJECTED"] = {"type": "string"}
+    assert "INJECTED" not in reg.get_schema("s")["input_schema"]["properties"]
 
 
 def test_openai_functions_shape():
@@ -173,7 +201,9 @@ def test_openai_functions_shape():
 
 def test_openai_functions_uses_parameters_key_when_no_input_schema():
     reg = Registry()
-    reg.register("x", lambda: None, schema={"name": "x", "parameters": {"type": "object"}})
+    reg.register(
+        "x", lambda: None, schema={"name": "x", "parameters": {"type": "object"}}
+    )
     fns = reg.openai_functions()
     assert fns[0]["function"]["parameters"] == {"type": "object"}
 
@@ -223,7 +253,9 @@ def test_with_side_effect_filters():
     reg = Registry()
     reg.register("r1", lambda: None, schema=SAMPLE_SCHEMA, side_effects=["read"])
     reg.register("w1", lambda: None, schema=SAMPLE_SCHEMA, side_effects=["write"])
-    reg.register("r2", lambda: None, schema=SAMPLE_SCHEMA, side_effects=["read", "network"])
+    reg.register(
+        "r2", lambda: None, schema=SAMPLE_SCHEMA, side_effects=["read", "network"]
+    )
 
     reads = reg.with_side_effect("read")
     assert sorted(e.name for e in reads) == ["r1", "r2"]
@@ -232,7 +264,9 @@ def test_with_side_effect_filters():
 def test_without_side_effect_filters():
     reg = Registry()
     reg.register("safe", lambda: None, schema=SAMPLE_SCHEMA, side_effects=["read"])
-    reg.register("risky", lambda: None, schema=SAMPLE_SCHEMA, side_effects=["destructive"])
+    reg.register(
+        "risky", lambda: None, schema=SAMPLE_SCHEMA, side_effects=["destructive"]
+    )
 
     safe = reg.without_side_effect("destructive")
     assert [e.name for e in safe] == ["safe"]
